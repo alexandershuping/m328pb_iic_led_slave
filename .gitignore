@@ -1,0 +1,7 @@
+build
+atmega328pb_datasheet.pdf
+tablebetter.py
+*.o
+*.hex
+*.elf
+*.swp
