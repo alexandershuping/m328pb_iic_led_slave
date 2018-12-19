@@ -33,7 +33,7 @@
 
 #define SLAVE
 
-#define ADDRESS 0x31
+#define ADDRESS 0x30
 #define REMOTE 0x20
 #define BITRATE_PRESCALER 0
 #define BITRATE 0
@@ -62,6 +62,11 @@ volatile IIC_COMMAND_t current_command = 0;
 volatile uint8_t command_index = 0;
 volatile uint8_t channel_select = 0; // 0 = RED; 1 = GRN; 2 = BLU
 
+volatile uint8_t groups[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+volatile uint8_t phase_buf = 0;
+volatile bool included = false;
+volatile bool excluded = false;
+
 volatile uint8_t stored_data = 0;
 
 uint8_t iic_callback_fun(volatile iic_t *iic, uint8_t received_data){
@@ -73,6 +78,18 @@ uint8_t iic_callback_fun(volatile iic_t *iic, uint8_t received_data){
 		if(current_command == 0){
 			current_command = received_data;
 			command_index = 0;
+			// Respond to LED exclusive synchronize command
+			if(current_command == IIC_COMMAND_LED_EXCLUSIVE_SYNCHRONIZE){
+				current_command = 0;
+				if((excluded == 1) || (included == 0)){
+					included = 0;
+					excluded = 0;
+				}else{
+					included = 0;
+					excluded = 0;
+					lutstep = phase_buf << 2;
+				}
+			}
 		}else{
 			switch(current_command){
 
@@ -106,6 +123,36 @@ uint8_t iic_callback_fun(volatile iic_t *iic, uint8_t received_data){
 					current_command = 0;
 					pattern = received_data;
 					break;
+				
+				// Respond to LED synchronize inclusion command
+				case IIC_COMMAND_LED_INCLUDE_DEVICE:
+					current_command = 0;
+					included = 1;
+					excluded = 0;
+					phase_buf = received_data;
+					break;
+
+				// Respond to LED synchronize exclusion command
+				case IIC_COMMAND_LED_EXCLUDE_DEVICE:
+					current_command = 0;
+					included = 0;
+					excluded = 1;
+					break;
+
+				// Respond to LED inclusive synchronize command
+				case IIC_COMMAND_LED_INCLUSIVE_SYNCHRONIZE:
+					current_command = 0;
+					if(excluded){
+						included = 0;
+						excluded = 0;
+						break;
+					}
+
+					lutstep = (included) ? (phase_buf << 2) : (received_data << 2);
+					included = 0;
+					excluded = 0;
+					break;
+
 
 				// Unsupported command
 				default:
